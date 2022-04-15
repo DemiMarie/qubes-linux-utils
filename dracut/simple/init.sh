@@ -44,13 +44,14 @@ fi
 
 SWAP_SIZE=$(( 1024 * 1024 * 2 )) # sectors, 1GB
 
-if [ `cat /sys/class/block/$ROOT_DEV/ro` = 1 ] ; then
+read -r is_ro < "/sys/class/block/$ROOT_DEV/ro"
+if [ "$is_ro" -eq 1 ] ; then
     echo "Qubes: Doing COW setup for AppVM..."
 
     while ! [ -e /dev/xvdc ]; do sleep 0.1; done
-    VOLATILE_SIZE=$(cat /sys/class/block/xvdc/size) # sectors
-    ROOT_SIZE=$(cat /sys/class/block/$ROOT_DEV/size) # sectors
-    if [ $VOLATILE_SIZE -lt $SWAP_SIZE ]; then
+    read -r VOLATILE_SIZE < /sys/class/block/xvdc/size    # sectors
+    read -r ROOT_SIZE < "/sys/class/block/$ROOT_DEV/size" # sectors
+    if [ "$VOLATILE_SIZE" -lt "$SWAP_SIZE" ]; then
         die "volatile.img smaller than 1GB, cannot continue"
     fi
     /sbin/sfdisk -q --unit S /dev/xvdc >/dev/null <<EOF
@@ -64,8 +65,8 @@ EOF
     while ! [ -e /dev/xvdc1 ]; do sleep 0.1; done
     /sbin/mkswap /dev/xvdc1
     while ! [ -e /dev/xvdc2 ]; do sleep 0.1; done
-
-    echo "0 `cat /sys/class/block/$ROOT_DEV/size` snapshot /dev/$ROOT_DEV /dev/xvdc2 N 16" | \
+    read -r size < "/sys/class/block/$ROOT_DEV/size"
+    echo "0 $size snapshot /dev/$ROOT_DEV /dev/xvdc2 N 16" |
         /sbin/dmsetup create dmroot || { echo "Qubes: FATAL: cannot create dmroot!"; exit 1; }
     /sbin/dmsetup mknodes dmroot
     echo Qubes: done.
@@ -103,7 +104,7 @@ if ! [ -d "$NEWROOT/lib/modules/$kver/kernel" ]; then
         if ! [ -d "$NEWROOT/lib/.modules_work" ]; then
             mkdir -p "$NEWROOT/lib/.modules_work"
         fi
-        mount -t overlay none $NEWROOT/lib/modules -o lowerdir=/tmp/modules,upperdir=$NEWROOT/lib/modules,workdir=$NEWROOT/lib/.modules_work
+        mount -t overlay -o "lowerdir=/tmp/modules,upperdir=$NEWROOT/lib/modules,workdir=$NEWROOT/lib/.modules_work,index=on,metacopy=on" -- overlay "$NEWROOT/lib/modules"
     else
         # otherwise mount only `uname -r` subdirectory, to leave the rest of
         # /lib/modules writable

@@ -70,13 +70,14 @@ fi
 
 SWAP_SIZE=$(( 1024 * 1024 * 2 )) # sectors, 1GB
 
-if [ `cat /sys/class/block/$ROOT_DEV/ro` = 1 ] ; then
+read -r root_ro < "/sys/class/block/$ROOT_DEV/ro"
+if [ "$root_ro" = 1 ] ; then
     log_begin "Qubes: Doing COW setup for AppVM..."
 
     while ! [ -e /dev/xvdc ]; do sleep 0.1; done
-    VOLATILE_SIZE=$(cat /sys/class/block/xvdc/size) # sectors
-    ROOT_SIZE=$(cat /sys/class/block/$ROOT_DEV/size) # sectors
-    if [ $VOLATILE_SIZE -lt $SWAP_SIZE ]; then
+    read -r VOLATILE_SIZE < /sys/class/block/xvdc/size # sectors
+    read -r ROOT_SIZE < "/sys/class/block/$ROOT_DEV/size" # sectors
+    if [ "$VOLATILE_SIZE" -lt "$SWAP_SIZE" ]; then
         die "volatile.img smaller than 1GB, cannot continue"
     fi
     sfdisk -q --unit S /dev/xvdc >/dev/null <<EOF
@@ -93,7 +94,7 @@ EOF
     swapon /dev/xvdc1
     while ! [ -e /dev/xvdc2 ]; do sleep 0.1; done
 
-    echo "0 `cat /sys/class/block/$ROOT_DEV/size` snapshot /dev/$ROOT_DEV /dev/xvdc2 N 16" | \
+    echo "0 $ROOT_SIZE snapshot /dev/$ROOT_DEV /dev/xvdc2 N 16" | \
         dmsetup --noudevsync create dmroot || die "Qubes: FATAL: cannot create dmroot!"
     dmsetup mknodes dmroot
     log_end
