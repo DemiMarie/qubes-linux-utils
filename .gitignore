@@ -12,4 +12,7 @@ debian/changelog.*
 /qrexec-lib/unicode-generator
 /qrexec-lib/validator-test
 /qrexec-lib/libqubes-*.so*
+/rust/target/
+/rust/qubes-utils-sys/src/rust_bindings.rs
+/rust/rust_bindings.dep
 /imgconverter/qubesimgconverter.egg-info/

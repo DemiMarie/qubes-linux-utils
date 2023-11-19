@@ -1,0 +1,6 @@
+[workspace]
+members = [
+   "qubes-utils",
+   "qubes-utils-sys",
+]
+resolver = "2"
