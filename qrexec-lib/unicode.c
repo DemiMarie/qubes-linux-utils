@@ -20,7 +20,7 @@ qubes_pure_code_point_safe_for_display(uint32_t code_point) {
 
 /* validate single UTF-8 character
  * return bytes count of this character, or 0 if the character is invalid */
-static int validate_utf8_char(const uint8_t *untrusted_c) {
+static int validate_utf8_char(const uint8_t *untrusted_c, bool allow_unsafe) {
     int tails_count = 0;
     int total_size = 0;
     uint32_t code_point;
@@ -69,7 +69,12 @@ static int validate_utf8_char(const uint8_t *untrusted_c) {
                 return 0;
             code_point = *untrusted_c & 0x3F;
             break;
-        case 0xE1 ... 0xEF:
+        case 0xED:
+            if (untrusted_c[1] >= 0xA0) // surrogate
+                return 0;
+            __attribute__((fallthrough));
+        case 0xE1 ... 0xEC:
+        case 0xEE ... 0xEF:
             total_size = 3;
             tails_count = 2;
             code_point = *untrusted_c & 0xF;
@@ -83,7 +88,11 @@ static int validate_utf8_char(const uint8_t *untrusted_c) {
                 return 0;
             code_point = *untrusted_c & 0x3F;
             break;
-        case 0xF1 ... 0xF4:
+        case 0xF4:
+            if (untrusted_c[1] >= 0x90) // over 0x10FFFF
+                return 0;
+            __attribute__((fallthrough));
+        case 0xF1 ... 0xF3:
             total_size = 4;
             tails_count = 3;
             code_point = *untrusted_c & 0x7;
@@ -98,8 +107,7 @@ static int validate_utf8_char(const uint8_t *untrusted_c) {
             return 0;
         code_point = code_point << 6 | (*untrusted_c & 0x3F);
     }
-
-    return qubes_pure_code_point_safe_for_display(code_point) ? total_size : 0;
+    return (allow_unsafe || qubes_pure_code_point_safe_for_display(code_point)) ? total_size : 0;
 }
 
 // Statically assert that a statement is not reachable.
@@ -205,11 +213,11 @@ static ssize_t validate_path(const uint8_t *const untrusted_name,
         if (untrusted_name[i] == 0) {
             // If this is violated, the subsequent i++ will be out of bounds
             COMPILETIME_UNREACHABLE;
-        } else if ((0x20 <= untrusted_name[i] && untrusted_name[i] <= 0x7E) ||
-                   (flags & QUBES_PURE_ALLOW_UNSAFE_CHARACTERS) != 0) {
+        } else if (0x20 <= untrusted_name[i] && untrusted_name[i] <= 0x7E) {
             /* loop will advance past this */
         } else {
-            int utf8_ret = validate_utf8_char((const unsigned char *)(untrusted_name + i));
+            int utf8_ret = validate_utf8_char((const unsigned char *)(untrusted_name + i),
+                                              (flags & QUBES_PURE_ALLOW_UNSAFE_CHARACTERS) != 0);
             if (utf8_ret > 0) {
                 i += (size_t)(utf8_ret - 1); /* loop will do one more increment */
             } else {
@@ -306,7 +314,7 @@ qubes_pure_string_safe_for_display(const char *untrusted_str, size_t line_length
         if (untrusted_str[i] >= 0x20 && untrusted_str[i] <= 0x7E) {
             i++;
         } else {
-            int utf8_ret = validate_utf8_char((const uint8_t *)(untrusted_str + i));
+            int utf8_ret = validate_utf8_char((const uint8_t *)(untrusted_str + i), false);
             if (utf8_ret > 0) {
                 i += utf8_ret;
             } else {
